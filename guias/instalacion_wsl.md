@@ -1,9 +1,5 @@
 # Instalar Hadoop
 
-sudo apt remove openssh-server
-sudo apt install openssh-server
-
-
 Actualizaremos todo el software del sistema con `sudo apt update -y`. Esto podría tomar algunos minutos.
 
 Después correremos `sudo apt upgrade -y`
