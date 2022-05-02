@@ -1,41 +1,28 @@
 # Proyecto
 
-Una vez instaladas todas las herramientas, estamos listos para comenzar con el proyecto. 
-
-## Configuración de la carpeta de trabajo.
-
-Para poder editar fácilmente los archivos con cualquier editor de texto com por ejemplo Visual Studio Code, crearemos una carpeta dentro del sistema de archivos de Windows en donde almacenaremos el código fuente. En mi caso, llamaré a la carpeta `BigDataProject` en la ruta `D:\Users\pedro\Documents\mcd\2do_semestre\bigData\BigDataProject`
-
-![](imgs_proyecto/1.png)
-
-Desde Ubuntu, podemos acceder a cualquiera de nuestros dispositivos de almacenamiento desde la ruta `~/../../mnt/`. Si enlistamos este directorio los podremos ver como carpetas
-
-![](imgs_proyecto/2.png)
-
-A partir de ahí puedo enlistar el contenido de mi carpeta `bigData` (directorio padre de la carpeta `BigDataProject`) con el comando `ls ~/../../mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/`. Nótese que la ruta es prácticamente la misma que la otorgada por el explorador de archivos de Windows y que la carpeta principal del proyecto se encuentra ahí
-
-![](imgs_proyecto/3.png)
-
-Ahora, si nos movemos hasta la carpeta del proyecto con el comando `cd ~/../../mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject` y después ejecutamos la instrucción `pwd` imprimiremos la ubicación de la carpeta del proyecto dentro del sistema de archivos de Ubuntu
-
-![](imgs_proyecto/4.png)
-
-Añadiremos esta ruta a las variables de entorno del sistema para simplificar los comandos a la hora de ejecutar el código fuente. Abrimos el archivo `~/.basrhc` con el editor de texto con `vim ~/.basrhc` y escribimos la ruta hasta nuestra carpeta del proyecto en la variable de entorno `$PROJECT_HOME`
-
-```bash
-# Project main folder
-export PROJECT_HOME=/mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject
-```
-
-![](imgs_proyecto/5.png)
-
-Cerramos el archivo, guardamos los cambios y refrescamos las variables de entorno del sistema con el comando `source ~/.bashrc`
+Una vez instaladas todas las herramientas, estamos listos para comenzar con el proyecto. [insertar aquí un diagramita y la explicación del proyecto]
 
 ## Datos a utilizar 
 
-Se utilizará el archivo `2019-Nov.csv` que es parte del conjunto de datos [eCommerce behavior data for multi category store](https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store?select=2019-Nov.csv) de Kaggle. El cual, contiene información del comportamiento de los usuarios dentro de una tienda online en el mes de Noviembre del 2019.
+El archivo base a utilizar lleva como nombre `2019-Nov.csv` que es parte del conjunto de datos [eCommerce behavior data for multi category store](https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store?select=2019-Nov.csv) de Kaggle. El cual, contiene información del comportamiento de los usuarios dentro de una tienda online en el mes de Noviembre del 2019.
+
+El archivo contiene más de 67 millones de registros y tiene un peso de más de 9 Gb, esto resultó ser demasiado para las computadoras de los integrantes del equipo; por esta razón se generó el archivo `2019-Nov_10KSample.zip` que contiene apenas un diez mil renglones con los que simularemos la producción en tiempo real de datos. Se generó a partir de una muestra estratificada sobre el tipo de acción que los usuarios realizaron (`purchase`, `view` ó `cart`); es decir, el porcentaje original de cada tipo de acción se preserva en la muestra.
+
+Para extraer la muestra se corrió el siguiente script con Pyspark desde la [supercomputadora ACARUS de la Universidad de Sonora](http://acarus.uson.mx/default.htm)
+
+```python
+spark = SparkSession.builder.getOrCreate()
+
+df = spark.read.option("header", True).csv("2019-Nov.csv")
+
+df_sample = df.sampleBy("event_type", fractions={'purchase': 0.000148, 'view': 0.000148, 'cart':0.000148}, seed=10)
+
+df_sample.repartition(1).write.option('header', True).csv("2019-Nov_10KSample.csv", sep=',', header=True)
+```
 
 ## Preparación del ecosistema
+
+### 1. Inicializar la sesión de Ubuntu
 
 Primero que nada, hay que asegurarnos que las herramientas del ecosistema estén corriendo en nuestra sesión de Ubutnu. Comenzamos con crear una conexión ssh en localhost con los comandos
 
@@ -46,44 +33,212 @@ ssh localhost
 
 ![](imgs_proyecto/6.png)
 
-Ahora, corremos los daemons de Hadoop con el comando `$HADOOP_INSTALL/sbin/start-all.sh`
+### 2. Inicializar los daemons de Hadoop
 
-![](imgs_proyecto/7.png)
+Para ello, utilizamos el comando `$HADOOP_INSTALL/sbin/start-all.sh` y después nos aseguramos de que los daemons se encuentren corriendo con el comando `jps`
+
+![](imgs_proyecto/45.png)
+
+
+### 3. Inicializar el servicio de MySQL
 
 Luego, inicializamos el servicio de MySQL con el comando `sudo service mysql start`
 
 ![](imgs_proyecto/8.png)
 
+### 4. Inicializar el servicio de Apache Cassandra
+
 Después, nos aseguramos que el servicio de Cassandra se ejecute con el comando `sudo service cassandra restart`
 
+![](imgs_proyecto/43.png)
 
-Abrimos dos terminales adicionales de Ubuntu: Una para correr el servidor de Zookeeper y la otra para lanzar el servidor de Kafka (recuerda crear la conexión al localhost con el comando `ssh localhost` en ambas terminales). Primero levantamos Zookeeper con el comando `nohup zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties &` en una terminal y después levantamos Kafka en la otra con el comando `nohup kafka-server-start.sh $KAFKA_HOME/config/server.properties &`. La instrucción `nohup <app> &` permitirtá correr los servidores de Zookeeper y Kafka en segundo plano, por lo que podremos cerrar estas dos terminales adicionales y Kafka seguirá ejecutándose.
+## 5. Levantar Apache Superset
+
+Ahora, vamos a correr Superset en una terminal dedicada. Para ello, la abrimos, nos conectamos al localhost con `ssh localhost`, inicializamos Anaconda con `eval "$(/home/pedro/anaconda3/bin/conda shell.bash hook)"`, activamos el entorno de Superset con `conda activate superset` y levantamos la aplicación con `superset run --with-threads`.
+
+![](imgs_proyecto/44.png)
+
+## 6. Levantar los servidores de Zookeeper y Kafka
+
+Abrimos dos terminales adicionales de Ubuntu: Una para correr el servidor de Zookeeper y la otra para lanzar el servidor de Kafka (recuerda crear la conexión al localhost con el comando `ssh localhost` en ambas terminales). Primero levantamos Zookeeper con el comando `nohup zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties &` en una terminal y después levantamos Kafka en la otra con el comando `nohup kafka-server-start.sh $KAFKA_HOME/config/server.properties &`. La instrucción `nohup <app> &` permitirtá correr los servidores de Zookeeper y Kafka en segundo plano, por lo que podremos cerrar estas dos terminales adicionales y Kafka seguirá ejecutándose. En caso de no utilizar dichas opciones correran normalmente
 
 ![](imgs_proyecto/10.png)
 
 ![](imgs_proyecto/11.png)
 
-Finalmente, abrimos otra terminal, levantamos Anaconda con el comando `eval "$(/home/pedro/anaconda3/bin/conda shell.bash hook)"` (asegúrate de editarlo con la ruta de instalación de Anaconda en tu computadora) y entramos al entorno virtual del proyecto con `conda activate bdp`
+## 7. Correr el Job de Spark para el procesamiento y almacenamiento de los datos 
 
-![](imgs_proyecto/9.png)
+Primero abrimos una terminal y nos conectamos al localhost con el comando `ssh localhost`. Para leer, procesar y almacenar los datos tanto en Cassandra como en MySQL corremos el script `data_processing.py` utilizando Spark con el comando `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.0.1,com.datastax.spark:spark-cassandra-connector_2.12:3.1.0 --jars /usr/share/java/mysql-connector-java-8.0.28.jar $PROJECT_HOME/src/data_processing.py`. 
 
-## 1. Ingesta de datos: Kafka Producer
+* El parámetro `--packages` se utiliza para cargar al cluster y utilizar las dependencias `spark-sql-kafka` y `spark-cassandra-connector` directamente desde sus servidores web.
+* El parámetro `--jars` especifica el path hacia el conector de MySQL para Java.
 
-Comenzaremos a configurar el bloque de ingesta de datos, para ello, debemos crear un Topic de Kafka para recibir la información y crear las bases de datos en MySQL y Cassandra.
+El script a ejecutar es el siguiente:
 
-Vamos a crear el topic `ecommercetopic` con el comando `kafka-topics.sh --bootstrap-server localhost:9092 --create --replication-factor 1 --partitions 1 --topic ecommercetopic`
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
 
-![](imgs_proyecto/12.png)
+import time
 
-Luego, instalamos el paquete `kafka-python` en el entorno de Anaconda con el comando `conda install -c conda-forge kafka-python -y`
+# Kafka constants
+KAFKA_TOPIC_NAME = 'ecommercetopic'
+KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
 
-![](imgs_proyecto/13.png)
+# MySQL constants
+MYSQL_HOST_NAME='localhost'
+MYSQL_PORT='3306'
+MYSQL_DATABASE='ecommerce'
+MYSQL_TABLE='operations'
+MYSQL_USR_NAME='admin'
+MYSQL_PASSWORD='Admin123.,'
+MYSQL_JDBC_URL=f'jdbc:mysql://{MYSQL_HOST_NAME}:{MYSQL_PORT}/{MYSQL_DATABASE}'
+MYSQL_DRIVER_CLASS='com.mysql.cj.jdbc.Driver'
 
-También instalamos el paquete `pandas` con el comando `conda install -c anaconda pandas -y`
+# Cassandra Constants
+CASSANDRA_HOST_NAME = 'localhost'
+CASSANDRA_PORT = '9042'
+CASSANDRA_KEYSPACE='ecommerce_ks'
+CASSANDRA_TABLE = 'operations'
 
-![](imgs_proyecto/14.png)
+def save_to_cassandra(current_df, epoch_id):
+    '''
+        This method update the Cassandra table.
 
-El programa del Producer se encuentra en el archivo `BigDataProject/src/kafka_producer.py`
+        Params
+        ------
+        - current_df: Latest raw dataframe
+        - epoch_id: Latest epoch number
+
+        Returns
+        -------
+        None
+    '''
+    print('Saving to Cassandra')
+
+    current_df \
+        .write \
+        .format('org.apache.spark.sql.cassandra') \
+        .mode('append') \
+        .options(table=CASSANDRA_TABLE, keyspace=CASSANDRA_KEYSPACE) \
+        .save()
+
+def save_to_mysql(current_df, epoch_id):
+    '''
+        This method update the MySQL table.
+
+        Params
+        ------
+        - current_df: Latest raw dataframe
+        - epoch_id: Latest epoch number
+
+        Returns
+        -------
+        None
+    '''
+    db_credentials = {
+        'user': MYSQL_USR_NAME,
+        'password': MYSQL_PASSWORD,
+        'driver': MYSQL_DRIVER_CLASS
+    }
+
+    print('Saving to Mysql')
+    current_df \
+        .write \
+        .jdbc(
+            url=MYSQL_JDBC_URL,
+            table=MYSQL_TABLE,
+            mode='append',
+            properties=db_credentials
+        )
+
+if __name__ == '__main__':
+    print('Data Processing application started')
+    print(time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    # Creating a Spark Session
+    spark = SparkSession \
+            .builder \
+            .appName('Pyspark structured streaming') \
+            .master('local[*]') \
+            .getOrCreate()
+    spark.sparkContext.setLogLevel('ERROR')
+
+    # Extracting information from Kafka topic
+    kafka_stream = spark \
+        .readStream \
+        .format('kafka') \
+        .option('kafka.bootstrap.servers', KAFKA_BOOTSTRAP_SERVERS) \
+        .option('subscribe', KAFKA_TOPIC_NAME) \
+        .option('startingOffsets', 'latest') \
+        .load()
+    raw_info = kafka_stream.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+    # Building a Schema (columns and their types) to the information
+    # retrieved
+    df_schema = StructType() \
+            .add('id', StringType()) \
+            .add('event_time', StringType()) \
+            .add('event_type', StringType()) \
+            .add('product_id', StringType()) \
+            .add('category_id', StringType()) \
+            .add('category_code', StringType()) \
+            .add('brand', StringType()) \
+            .add('price', FloatType()) \
+            .add('user_id', StringType()) \
+            .add('user_session', StringType())
+    
+    # Application of the schema to the information retrieved
+    df_raw = raw_info \
+        .select(from_json(col('value'), df_schema).alias('dataframe'))
+    df_raw = df_raw.select('dataframe.*')
+
+    # Storing raw data into Cassandra database
+    df_raw \
+        .writeStream \
+        .trigger(processingTime='15 seconds') \
+        .outputMode('update') \
+        .foreachBatch(save_to_cassandra) \
+        .start()
+    
+    # ----- DATA PREPROCESSING -----
+
+    # Removing useless columns
+    df = df_raw.drop('product_id', 'category_id', 'user_id', 'user_session')\
+    # Splitting 'category_code' to find the department and product
+    split_col = split(df['category_code'], '\.')
+    df = df.withColumn('department', element_at(split_col, 1))
+    df = df.withColumn('product', element_at(split_col, -1))
+    # Removing column 'category_code'
+    df = df.drop('category_code')
+    # Creating revenue column
+    df = df.withColumn('revenue', when(df.event_type=='purchase', df.price).otherwise(0))
+    # Filling nans in 'brand', 'department' and 'product' columns
+    for c in ['brand', 'department', 'product']:
+        df = df.withColumn(c, regexp_replace(c, 'NaN', 'other'))
+    
+    # Storing processed dataframe into MySQL database
+    df \
+        .writeStream \
+        .trigger(processingTime='15 seconds') \
+        .outputMode('update') \
+        .foreachBatch(save_to_mysql) \
+        .start() \
+        .awaitTermination()
+```
+
+Como todavía no hemos enviado ningún mensaje hacia el topic de Kafka, este job se quedará en Standby esperando a recibir datos para procesarlos y almacenarlos.
+
+![](imgs_proyecto/47.png)
+
+### 8. Lanzar el Kafka producer
+
+Finalmente, abrimos otra terminal. Nos conectamos al localhost con `ssh localhost`, levantamos Anaconda con el comando `eval "$(/home/pedro/anaconda3/bin/conda shell.bash hook)"` y entramos al entorno virtual del Kafka producer con `conda activate producer`
+
+![](imgs_proyecto/46.png)
+
+El script `kafka_producer.py` que se encuentra en el directorio del proyecto es el que se encargará de simular un flujo de datos en tiempo real
 
 ```python
 from kafka import KafkaProducer
@@ -96,7 +251,7 @@ import uuid
 # Constants
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
 KAFKA_TOPIC_NAME = 'ecommercetopic'
-DATA_PATH = '/mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject/data/2019-Nov.csv.zip'
+DATA_PATH = '/mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject/data/2019-Nov_10KSample.zip'
 
 # Serializer method
 def serializer(data):
@@ -109,19 +264,19 @@ producer = KafkaProducer(
 )
 
 # Dataframe to simulate real-time data flow
-df = pd.read_csv(DATA_PATH, nrows=1000)
-df['id'] = df.apply(lambda x: str(uuid.uuid1()), axis=1)
-print(len(df.id.unique()))
+df = pd.read_csv(DATA_PATH)
 
 if __name__ == '__main__':
     while True:
         # Number of messages to send in this iteration
-        n_msjs = randint(1, 5)
+        n_msjs = randint(1, 10)
         # Getting random n_msjs from the dataframe
         sample_df = df.sample(n_msjs, axis=0)
         # Setting a timestamp
         sample_df.event_time = pd.Timestamp.now()
         sample_df.event_time = sample_df.event_time.astype('str')
+        # Setting a unique ID
+        sample_df['id'] = df.apply(lambda x: str(uuid.uuid1()), axis=1)
         # Creating a list of dictionaries from sampled dataframe
         sample = sample_df.to_dict('records')
 
@@ -133,51 +288,74 @@ if __name__ == '__main__':
         time.sleep(randint(1, 3))
 ```
 
-Para ejecutarlo, corremos el comando `python $PROJECT_HOME/src/kafka_producer.py`. **Nota** verificar que estemos ejecutando el programa desde el entorno virtual de anaconda que fue previamente configurado para este proyecto. Si abrimos una nueva terminal, iniciamos el servicio de ssh, nos conectamos al localhost y ejecutamos un Consumer con el comando `kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic ecommercetopic --from-beginning` podremos verificar que los mensajes enviados desde el script de Python están siendo recibidos por Kafka en su correspondiente topic
+Lo ejecutamos con el comando `python $PROJECT_HOME/src/kafka_producer.py`. Al cabo de unos segundos podremos ver que comienzan a enviarse datos, al mismo tiempo, el job de Spark nos indicará que ha comenzado a almacenar datos tanto en MySQL como en Cassandra
 
-![](imgs_proyecto/15.png)
+![](imgs_proyecto/48.png)
 
-En caso de ser necesario, podemos borrar el topic con el comando `kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic ecommercetopic`
+Ahora, podemos revisar el Dashboard que hayamos creado. Por ejemplo, realicé un primer chequeo a las **12:34 AM** y la información de la página principal era la siguiente
 
-## 2. Creación de las bases de datos
+![](imgs_proyecto/49.png)
 
-Ahora, crearemos una base de datos en Cassandra para almacenar los datos crudos y otra base de datos en MySQL para almacenar los datos procesados.
+Unos minutos después, a las **12:37 AM** Refresqué el dashboard y obtuve resultados actualizados
 
-Para crear la base de datos en Cassandra, creamos una CLI de CQL con el comando `cqlsh --request-timeout=3600` (para evitar TimeOuts) dentro del entorno de Anaconda . Luego, creamos la base de datos `ecommerce_ks` con el comando `CREATE KEYSPACE ecommerce_ks WITH replication = {'class':'SimpleStrategy', 'replication_factor':1};`, después nos movemos a esa base de datos con el comando `USE ecommerce_ks;` y creamos la tabla en donde almacenaremos toda nuestra información con el comando `CREATE TABLE ecommerce_ks.operations (id UUID PRIMARY KEY, event_time text, event_type text, product_id text, category_id text, category_code text, brand text, price float, user_id text, user_session text);`. Podemos verificar que la tabla se ha creado con el comando `DESCRIBE tables;` y tambien podemos revisar su descripción con `DESC ecommerce_ks.operations;`
+![](imgs_proyecto/50.png)
 
-![](imgs_proyecto/16.png)
+![](imgs_proyecto/51.png)
 
-Ahora crearemos la base de datos en MySQL. Primero entramos a la CLI de MySQL con el comando `sudo mysql`. Una vez dentro, creamos la base de datos para el proyecto con el comando `CREATE DATABASE ecommerce;` y la seleccionamos con el comando `USE ecommerce`. Ahora, creamos la tabla `operations` con el comando `CREATE TABLE operations(id VARCHAR(100) NOT NULL, event_time DATETIME, event_type VARCHAR(20), department VARCHAR(50), product VARCHAR(50), brand VAR CHAR(50), price FLOAT, revenue FLOAT, PRIMARY KEY(id));`. Finalmente, podemos verificar la cración de la tabla con el comando `DESCRIBE operations;`
+De hecho, podemos asignar un intervalo de tiempo para que el Dashboard se refresque automáticamente desde la opción `Set auto-refresh interval`
 
-![](imgs_proyecto/17.png)
+![](imgs_proyecto/52.png)
 
-Ahora, creamos un usuario administrador de esta base de datos con el comando `CREATE USER 'admin'@'localhost' IDENTIFIED BY Admin123.,;`. Después le otorgamos todos los privilegios sobre la base de datos `ecommerce` con el comando `GRANT ALL PRIVILEGES ON ecommerce.* TO 'admin'@'localhost';`. Finalmente, actualizamos los privilegios con el comando `FLUSH PRIVILEGES;`
+![](imgs_proyecto/53.png)
 
-![](imgs_proyecto/18.png)
+Ahora, vistazo a cada pestaña de nuestro modesto pero informativo Dashboard
+
+![](imgs_proyecto/54.png)
+
+![](imgs_proyecto/55.png)
+
+![](imgs_proyecto/56.png)
+
+![](imgs_proyecto/57.png)
+
+![](imgs_proyecto/58.png)
 
 
-## 3. Lectura, procesamiento y almacenamiento de los datos
 
-Primero, añadimos algunas variables de entorno para Pyspark en el archivo `~/.bashrc`. Primero, debemos conocer la versión de py4j. Para ello podemos usar el comando `ls -d $SPARK_HOME/python/lib/py4j*`
 
-![](imgs_proyecto/20.png)
 
-Una vez sabiendo la versión añadimos las siguientes variables de entorno con el comando `vim ~/.bashrc`
 
-```bash
-export PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.3-src.zip:$PYTHONPATH
-export PATH=$SPARK_HOME/bin:$SPARK_HOME/python:$PATH
-```
 
-![](imgs_proyecto/20.png)
 
-Cerramos el archivo, guardamos todos los cambios y actualizamos las variables de entorno con el comando `source ~/.bashrc`.
 
-Para leer, procesar y almacenar los datos tanto en Cassandra como en MySQL corremos el script `data_processing.py` utilizando Spark con el comando `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.0.1,com.datastax.spark:spark-cassandra-connector_2.12:3.1.0 $PROJECT_HOME/src/data_processing.py`. 
 
-El parámetro `--packages` se utiliza para cargar al cluster y utilizar las dependencias `spark-sql-kafka` y `spark-cassandra-connector` directamente desde sus servidores.
 
-**Nota** Para que este script actualice las bases de datos es estrictamente necesario que el programa `kafka_producer.py` esté ejecutándose simultaneamente.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

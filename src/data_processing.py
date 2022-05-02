@@ -16,6 +16,7 @@ MYSQL_TABLE='operations'
 MYSQL_USR_NAME='admin'
 MYSQL_PASSWORD='Admin123.,'
 MYSQL_JDBC_URL=f'jdbc:mysql://{MYSQL_HOST_NAME}:{MYSQL_PORT}/{MYSQL_DATABASE}'
+MYSQL_DRIVER_CLASS='com.mysql.cj.jdbc.Driver'
 
 # Cassandra Constants
 CASSANDRA_HOST_NAME = 'localhost'
@@ -23,8 +24,20 @@ CASSANDRA_PORT = '9042'
 CASSANDRA_KEYSPACE='ecommerce_ks'
 CASSANDRA_TABLE = 'operations'
 
-def save_to_cassandra(current_df, epoc_id):
-    print('Epoch id:', epoc_id)
+def save_to_cassandra(current_df, epoch_id):
+    '''
+        This method update the Cassandra table.
+
+        Params
+        ------
+        - current_df: Latest raw dataframe
+        - epoch_id: Latest epoch number
+
+        Returns
+        -------
+        None
+    '''
+    print('Saving to Cassandra')
 
     current_df \
         .write \
@@ -32,6 +45,35 @@ def save_to_cassandra(current_df, epoc_id):
         .mode('append') \
         .options(table=CASSANDRA_TABLE, keyspace=CASSANDRA_KEYSPACE) \
         .save()
+
+def save_to_mysql(current_df, epoch_id):
+    '''
+        This method update the MySQL table.
+
+        Params
+        ------
+        - current_df: Latest raw dataframe
+        - epoch_id: Latest epoch number
+
+        Returns
+        -------
+        None
+    '''
+    db_credentials = {
+        'user': MYSQL_USR_NAME,
+        'password': MYSQL_PASSWORD,
+        'driver': MYSQL_DRIVER_CLASS
+    }
+
+    print('Saving to Mysql')
+    current_df \
+        .write \
+        .jdbc(
+            url=MYSQL_JDBC_URL,
+            table=MYSQL_TABLE,
+            mode='append',
+            properties=db_credentials
+        )
 
 if __name__ == '__main__':
     print('Data Processing application started')
@@ -82,14 +124,30 @@ if __name__ == '__main__':
         .foreachBatch(save_to_cassandra) \
         .start()
     
-    # Printing information retrieved to console
-    df_output = df_raw \
+    # ----- DATA PREPROCESSING -----
+
+    # Removing useless columns
+    df = df_raw.drop('product_id', 'category_id', 'user_id', 'user_session')\
+    # Splitting 'category_code' to find the department and product
+    split_col = split(df['category_code'], '\.')
+    df = df.withColumn('department', element_at(split_col, 1))
+    df = df.withColumn('product', element_at(split_col, -1))
+    # Removing column 'category_code'
+    df = df.drop('category_code')
+    # Creating revenue column
+    df = df.withColumn('revenue', when(df.event_type=='purchase', df.price).otherwise(0))
+    # Filling nans in 'brand', 'department' and 'product' columns
+    for c in ['brand', 'department', 'product']:
+        df = df.withColumn(c, regexp_replace(c, 'NaN', 'other'))
+    
+    # Storing processed dataframe into MySQL database
+    df \
         .writeStream \
         .trigger(processingTime='15 seconds') \
         .outputMode('update') \
-        .option('truncate', 'false') \
-        .format('console') \
-        .start()
+        .foreachBatch(save_to_mysql) \
+        .start() \
+        .awaitTermination()
 
-    df_output.awaitTermination()
+    
 

@@ -8,7 +8,7 @@ import uuid
 # Constants
 KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
 KAFKA_TOPIC_NAME = 'ecommercetopic'
-DATA_PATH = '/mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject/data/2019-Nov.csv.zip'
+DATA_PATH = '/mnt/d/Users/pedro/Documents/mcd/2do_semestre/bigData/BigDataProject/data/2019-Nov_10KSample.zip'
 
 # Serializer method
 def serializer(data):
@@ -21,18 +21,19 @@ producer = KafkaProducer(
 )
 
 # Dataframe to simulate real-time data flow
-df = pd.read_csv(DATA_PATH, nrows=1000)
-df['id'] = df.apply(lambda x: str(uuid.uuid1()), axis=1)
+df = pd.read_csv(DATA_PATH)
 
 if __name__ == '__main__':
     while True:
         # Number of messages to send in this iteration
-        n_msjs = randint(1, 5)
+        n_msjs = randint(1, 10)
         # Getting random n_msjs from the dataframe
         sample_df = df.sample(n_msjs, axis=0)
         # Setting a timestamp
         sample_df.event_time = pd.Timestamp.now()
         sample_df.event_time = sample_df.event_time.astype('str')
+        # Setting a unique ID
+        sample_df['id'] = df.apply(lambda x: str(uuid.uuid1()), axis=1)
         # Creating a list of dictionaries from sampled dataframe
         sample = sample_df.to_dict('records')
 
